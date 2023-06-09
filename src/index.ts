@@ -42,6 +42,7 @@ class Promise2<TSuccess = unknown, TFail = unknown> {
     #val?: TSuccess | TFail | any;
     #state: State = State.PENDING;
     #handlers: Handlers[] = [];
+    #handlersExecuted = false;
 
     #success = (value: TSuccess) => {
         this.#updateResult(value, State.SUCCESS);
@@ -68,6 +69,10 @@ class Promise2<TSuccess = unknown, TFail = unknown> {
             return val.next(this.#success, this.#fail, this.#error)
         }
 
+        if (isThenable<TSuccess>(val)) {
+            return val.then(this.#success, this.#error)
+        }
+
         this.#val = val;
         this.#state = state;
 
@@ -78,32 +83,24 @@ class Promise2<TSuccess = unknown, TFail = unknown> {
         if (this.#state === State.PENDING) {
             return null;
         }
-        if (this.#state === State.ERROR && this.#handlers.length === 0) {
-            return this.#defaultErrorHandler(this.#val);
-        }
-        this.#handlers.forEach(handlers => {
-            const onErr = handlers.onErr ?? this.#defaultErrorHandler;
-            if (this.#state === State.SUCCESS) {
-                return queueMicrotask(() => {
-                    try {
-                        return handlers.onSuccess!(this.#val);
-                    } catch (error) {
-                        return onErr(error);
-                    }
-                })
+        queueMicrotask(() => {
+            if (!this.#handlersExecuted && this.#state === State.ERROR && this.#handlers.length === 0) {
+                return this.#defaultErrorHandler(this.#val);
             }
-            if (this.#state === State.FAIL) {
-                return queueMicrotask(() => {
-                    try {
-                        return handlers.onFail!(this.#val);
-                    } catch (error) {
-                        return onErr(error);
-                    }
-                })
-            }
-            return queueMicrotask(() => onErr(this.#val));
+            this.#handlers.forEach(handlers => {
+                const onErr = handlers.onErr ?? this.#defaultErrorHandler;
+                if (this.#state === State.SUCCESS) {
+                    return handlers.onSuccess!(this.#val);
+                }
+                if (this.#state === State.FAIL) {
+                    return handlers.onFail!(this.#val);
+                }
+                return onErr(this.#val);
+            })
+            this.#handlers = [];
+            this.#handlersExecuted = true
         })
-        this.#handlers = [];
+        
     }
 
     next<TRes1, TRes2, TRes3>(onSuccess?: (val: TSuccess) => TRes1, onFail?: (val: TFail) => TRes2, onErr?: (err: any) => TRes3) {
@@ -175,27 +172,32 @@ class Promise2<TSuccess = unknown, TFail = unknown> {
                     try {
                         return res(onResolve([null, value]));
                     } catch (err) {
-                        if (onReject) {
-                            return rej(onReject(err))
-                        }
                         return rej(err)
                     }
                  },
                 onFail: (value: TFail) => {
                     if (!onResolve) {
-                        return res([null, value])
+                        return res([value])
                     }
                     
                     try {
                         return res(onResolve([value]));
                     } catch (err) {
-                        if (onReject) {
-                            return rej(onReject(err))
-                        }
                         return rej(err)
                     }
                 },
-                onErr: (err: any) => rej(this.#defaultErrorHandler(err)),
+                onErr: (err: any) =>  {
+                    if (!onReject) {
+                        return rej(err)
+                    }
+                    try {
+                        console.log('TUT')
+                        res(onReject(err))
+                    } catch (error) {
+                        console.log('failed', error)
+                        rej(error)
+                    }
+                },
             }
             this.#handlers.push(handlers);
             this.#executeHandlers();
@@ -232,7 +234,11 @@ class Promise2<TSuccess = unknown, TFail = unknown> {
 }
 
 function isPromise2<TVal, TErr>(maybePromise: TVal | TErr | Promise2<TVal, TErr>): maybePromise is Promise2<TVal, TErr> { 
-    return typeof (maybePromise as Promise2<TVal, TErr>)?.then === 'function'
+    return typeof (maybePromise as Promise2<TVal, TErr>)?.next === 'function'
+}
+
+function isThenable<T>(maybePromise: PromiseLike<T> | any): maybePromise is PromiseLike<T> {
+    return typeof (maybePromise as PromiseLike<T>)?.then === 'function'
 }
 
 
@@ -243,9 +249,8 @@ function isPromise2<TVal, TErr>(maybePromise: TVal | TErr | Promise2<TVal, TErr>
 
 // interface Promise<T> extends Omit<Promise2<T, any>, 'toPromise'> {}
 
-// const pr = new Promise2(r => { r(2); r(3)})
-// pr.then(val => console.log(val))
-// pr.then(val => console.log('SECOND', val))
+const pr = new Promise2((res, rej, err) => { err(2)})
+pr.then(val => console.log(val), err => console.log('CATCH', err))
 
 const a = new Promise2((resolve) => {
     setTimeout(() => resolve('pidor'), 1200)
@@ -265,3 +270,4 @@ const chain = a
     .fail((val) => { console.log(2, val); return Promise2.fail('sexd') })
     .fail((val) => { console.log('CALLED LAST'); return val + 12 });
 Promise2.fail(3).fail(() =>  {throw new Error('4') }).catch(console.error)
+Promise2.error('suka').catch(err => console.log('OPPA', err))
