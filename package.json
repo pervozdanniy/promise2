@@ -1,6 +1,6 @@
 {
-  "name": "promise",
-  "version": "1.0.0",
+  "name": "@pervozdanniy/promise",
+  "version": "0.0.1",
   "homepage": "https://bitbucket.org/pervozadiy/promise2",
   "description": "Extended promise implementation with separated fail and exception flows",
   "main": "dist/index.js",
@@ -43,5 +43,15 @@
     "ts-jest": "^29.1.2",
     "ts-node": "^10.0.0",
     "typescript": "^5.4.2"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://bitbucket.org/pervozadiy/promise2.git"
+  },
+  "bugs": {
+    "url": "https://bitbucket.org/pervozadiy/promise2/issues"
   }
 }
