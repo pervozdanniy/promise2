@@ -42,7 +42,7 @@ describe('Promise2 test', () => {
 
     it('should create succeeded promise', async () => {
       expect.assertions(4);
-      await Promise2.success('success').next(successFn, failFn, errorFn);
+      await Promise2.succeed('success').next(successFn, failFn, errorFn);
 
       expect(successFn).toHaveBeenCalledTimes(1);
       expect(successFn).toHaveBeenCalledWith('success');
@@ -60,7 +60,7 @@ describe('Promise2 test', () => {
     });
     it('should create error promise', async () => {
       expect.assertions(4);
-      await Promise2.error('error').next(successFn, failFn, errorFn);
+      await Promise2.throw('error').next(successFn, failFn, errorFn);
 
       expect(errorFn).toHaveBeenCalledTimes(1);
       expect(errorFn).toHaveBeenCalledWith('error');
@@ -142,7 +142,7 @@ describe('Promise2 test', () => {
 
     it('should add tasks to microqueue in order of calls', async () => {
       expect.assertions(1);
-      const pr = Promise2.success('value').then((val) => val);
+      const pr = Promise2.succeed('value').then((val) => val);
       const original = Promise.resolve('origValue').then((val) => val);
 
       const res = await Promise.race([pr, original]);
@@ -218,9 +218,9 @@ describe('Promise2 test', () => {
     it('should properly switch state based on handler return value', async () => {
       expect.assertions(4);
       const pr = new Promise2<never, string>((_, fail) => fail('fail'));
-      const toSuccess = jest.fn(() => Promise2.success('switched to success'));
+      const toSuccess = jest.fn(() => Promise2.succeed('switched to success'));
       const toFail = jest.fn(() => Promise2.fail('switched to fail'));
-      const toError = jest.fn(() => Promise2.error('switched to error'));
+      const toError = jest.fn(() => Promise2.throw('switched to error'));
       const finish = jest.fn();
 
       await pr.fail(toSuccess).success(toError).catch(toFail).fail(finish);

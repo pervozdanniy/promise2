@@ -11,14 +11,14 @@ type Handlers<TS = unknown, TF = unknown> = {
   onErr: (err: unknown) => void;
 };
 
-type HandlerReturn<T> = T extends Promise2<infer S, infer F> ? Promise2<S, F> : T;
-
-type PParam<TS, TF> = [null, TS] | [TF];
+type Unwind<T> = T extends Promise2<infer S, infer F> ? Promise2<S, F> : T;
 
 type Handler<T, R> = (val: T) => R extends Promise2<infer S, infer F> ? Promise2<S, F> : R;
 
-export default class Promise2<TSuccess, TFail> {
-  static success<T>(value: T extends Promise2<infer S, infer F> ? Promise2<S, F> : T) {
+type ParamTuple<TS, TF> = [null, TS] | [TF];
+
+export default class Promise2<TSuccess, TFail> implements PromiseLike<ParamTuple<TSuccess, TFail>> {
+  static succeed<T>(value: Unwind<T>) {
     if (isPromise2(value)) {
       return value;
     }
@@ -29,8 +29,14 @@ export default class Promise2<TSuccess, TFail> {
     return new Promise2<never, T>((_, fail) => fail(value));
   }
 
-  static error(err: unknown) {
+  static throw(err: unknown) {
     return new Promise2<never, never>((_s, _f, error) => error(err));
+  }
+
+  static fromPromise<T>(pr: PromiseLike<T>, rejectToFail = false) {
+    return new Promise2<T, typeof rejectToFail extends false ? never : unknown>((success, fail, err) => {
+      pr.then(success, rejectToFail ? fail : err);
+    });
   }
 
   static all = Promise.all;
@@ -38,10 +44,10 @@ export default class Promise2<TSuccess, TFail> {
   static allSettled = Promise.allSettled;
   static resolve = Promise.resolve;
   static reject = Promise.reject;
-  static [Symbol.species] = Promise2;
+  static [Symbol.species] = this;
 
   #val?: TSuccess | TFail | unknown;
-  #state: State = State.PENDING;
+  #state = State.PENDING;
   #handlers: Handlers<TSuccess, TFail>[] = [];
   #handlersExecuted = false;
 
@@ -56,6 +62,7 @@ export default class Promise2<TSuccess, TFail> {
   };
 
   #defaultErrorHandler(err: unknown) {
+    // make promise emit 'unhandledRejection'
     Promise.reject(err);
   }
 
@@ -111,51 +118,49 @@ export default class Promise2<TSuccess, TFail> {
     onFail?: Handler<TFail, TRes2>,
     onErr?: Handler<unknown, TRes3>
   ) {
-    return new Promise2<TSuccess | HandlerReturn<TRes1 | TRes3>, TFail | HandlerReturn<TRes2>>(
-      (success, fail, error) => {
-        const handlers = {
-          onSuccess: (value: TSuccess) => {
-            if (!onSuccess) {
-              return success(value);
-            }
-            try {
-              return success(onSuccess(value));
-            } catch (err) {
-              return error(err);
-            }
-          },
-          onFail: (value: TFail) => {
-            if (!onFail) {
-              return fail(value);
-            }
-            try {
-              return fail(onFail(value));
-            } catch (err) {
-              return error(err);
-            }
-          },
-          onErr: (err: unknown) => {
-            if (!onErr) {
-              return error(err);
-            }
-            try {
-              return success(onErr(err));
-            } catch (err) {
-              return error(err);
-            }
-          },
-        } satisfies Handlers<TSuccess, TFail>;
-        this.#handlers.push(handlers);
-        this.#executeHandlers();
-      }
-    );
+    return new Promise2<TSuccess | Unwind<TRes1 | TRes3>, TFail | Unwind<TRes2>>((success, fail, error) => {
+      const handlers = {
+        onSuccess: (value: TSuccess) => {
+          if (!onSuccess) {
+            return success(value);
+          }
+          try {
+            return success(onSuccess(value));
+          } catch (err) {
+            return error(err);
+          }
+        },
+        onFail: (value: TFail) => {
+          if (!onFail) {
+            return fail(value);
+          }
+          try {
+            return fail(onFail(value));
+          } catch (err) {
+            return error(err);
+          }
+        },
+        onErr: (err: unknown) => {
+          if (!onErr) {
+            return error(err);
+          }
+          try {
+            return success(onErr(err));
+          } catch (err) {
+            return error(err);
+          }
+        },
+      };
+      this.#handlers.push(handlers);
+      this.#executeHandlers();
+    });
   }
 
-  public success<TRes>(onSuccess: Handler<TSuccess, TRes>, onErr?: (err: unknown) => unknown) {
+  public success<TRes1, TRes2>(onSuccess: Handler<TSuccess, TRes1>, onErr?: Handler<unknown, TRes2>) {
     return this.next(onSuccess, undefined, onErr);
   }
 
-  public fail<TRes>(onFail: Handler<TFail, TRes>, onErr?: (err: unknown) => unknown) {
+  public fail<TRes1, TRes2>(onFail: Handler<TFail, TRes1>, onErr?: Handler<unknown, TRes2>) {
     return this.next(undefined, onFail, onErr);
   }
 
@@ -163,38 +168,44 @@ export default class Promise2<TSuccess, TFail> {
     return this.next(undefined, undefined, onErr);
   }
 
-  public then<TRes1, TRes2>(onResolve: (val: PParam<TSuccess, TFail>) => TRes1, onReject?: (err: unknown) => TRes2) {
-    return new Promise((res, rej) => {
+  then<TResult1 = ParamTuple<TSuccess, TFail>, TResult2 = never>(
+    onfulfilled?: ((value: ParamTuple<TSuccess, TFail>) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | undefined | null
+  ): PromiseLike<TResult1 | TResult2>;
+  public then<TResult1, TResult2>(
+    onfulfilled?: (val: ParamTuple<TSuccess, TFail>) => TResult1,
+    onrejected?: (err: unknown) => TResult2
+  ) {
+    return new Promise((resolve, reject) => {
       const handlers = {
         onSuccess: (value: TSuccess) => {
-          if (!onResolve) {
-            return res([null, value]);
+          if (!onfulfilled) {
+            return resolve([null, value]);
           }
           try {
-            return res(onResolve([null, value]));
+            return resolve(onfulfilled([null, value]));
           } catch (err) {
-            return rej(err);
+            return reject(err);
           }
         },
         onFail: (value: TFail) => {
-          if (!onResolve) {
-            return res([value]);
+          if (!onfulfilled) {
+            return resolve([value]);
           }
-
           try {
-            return res(onResolve([value]));
+            return resolve(onfulfilled([value]));
           } catch (err) {
-            return rej(err);
+            return reject(err);
           }
         },
         onErr: (err: unknown) => {
-          if (!onReject) {
-            return rej(err);
+          if (!onrejected) {
+            return reject(err);
           }
           try {
-            res(onReject(err));
+            resolve(onrejected(err));
           } catch (error) {
-            rej(error);
+            reject(error);
           }
         },
       };
