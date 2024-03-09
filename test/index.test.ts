@@ -141,6 +141,8 @@ describe('Promise2 test', () => {
     });
 
     it('should add tasks to microqueue in order of calls', async () => {
+      let b: Promise2<never, string>;
+      let a: Promise<any>;
       expect.assertions(1);
       const pr = Promise2.succeed('value').then((val) => val);
       const original = Promise.resolve('origValue').then((val) => val);

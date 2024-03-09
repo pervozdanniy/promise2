@@ -4,7 +4,7 @@ module.exports = {
     node: true,
     jest: true,
   },
-  ignorePatterns: ['.eslintrc.js', 'jest.config.ts', 'build', 'node_modules'],
+  ignorePatterns: ['.eslintrc.js', 'jest.config.ts', 'build', 'node_modules', 'test'],
   extends: [
     'plugin:@typescript-eslint/recommended',
     'plugin:prettier/recommended',
