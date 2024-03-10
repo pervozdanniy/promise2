@@ -1,6 +1,6 @@
 {
   "name": "@pervozdanniy/promise2",
-  "version": "0.0.2",
+  "version": "0.0.1",
   "homepage": "https://bitbucket.org/pervozadiy/promise2",
   "description": "Extended promise implementation with separated fail and exception flows",
   "main": "build/index.js",
