@@ -54,9 +54,12 @@ pr3.then(value => {}, err /* 'Exception value' */ => {});
 Promise2 offers similar to `then` method to work with 2-way Value/Error flow:
 
 ```typescript
-Promise2.succeed('value').next(value /* value */ => {}, reason => {}, exception => {});
-Promise2.fail('value').next(value => {}, reason /* value */ => {}, exception => {});
-Promise2.throw('value').next(value => {}, reason => {}, exception /* value */ => {});
+Promise2.succeed('value')
+  .next(value /* value */ => {}, reason => {}, exception => {});
+Promise2.fail('value')
+  .next(value => {}, reason /* value */ => {}, exception => {});
+Promise2.throw('value')
+  .next(value => {}, reason => {}, exception /* value */ => {});
 ```
 
 and set of shortcut helper methods
@@ -88,27 +91,47 @@ with `SUCCESS` state if no other state returned explicitly:
 
 ```typescript
 // native Promise behavior
-Promise.reject(new Error('some err')).catch(err => err).then(value /* Error('some err') */ => {}, reason => {});
-Promise.reject(new Error('some err')).catch(err => Promise.reject(err)).then(value => {}, reason /* Error('some err') */ => {});
-Promise.reject(new Error('some err')).catch(err => { throw err; }).then(value => {}, reason /* Error('some err') */ => {});
+Promise.reject(new Error('some err'))
+  .catch(err => err)
+  .then(value /* Error('some err') */ => {}, reason => {});
+Promise.reject(new Error('some err'))
+  .catch(err => Promise.reject(err))
+  .then(value => {}, reason /* Error('some err') */ => {});
+Promise.reject(new Error('some err'))
+  .catch(err => { throw err; })
+  .then(value => {}, reason /* Error('some err') */ => {});
 
 
-Promise2.throw(new Error('some err')).catch((err) => err).next(value /* Error('some err') */ => {}, fail => {}, err => {});
-Promise2.throw(new Error('some err')).catch((err) => Promise2.throw(err)).next(value => {}, fail => {}, err /* Error('some err') */ => {});
-Promise2.throw(new Error('some err')).catch((err) => { throw err; }).next(value => {}, fail => {}, err /* Error('some err') */ => {});
+Promise2.throw(new Error('some err'))
+  .catch((err) => err)
+  .next(value /* Error('some err') */ => {}, fail => {}, err => {});
+Promise2.throw(new Error('some err'))
+  .catch((err) => Promise2.throw(err))
+  .next(value => {}, fail => {}, err /* Error('some err') */ => {});
+Promise2.throw(new Error('some err'))
+  .catch((err) => { throw err; })
+  .next(value => {}, fail => {}, err /* Error('some err') */ => {});
 ```
 
 Unlike exception handler success and fail (`.done()` and `.fail()`) handlers keeps original promise state if no other
 state returned explicitly:
 
 ```typescript
-Promise2.succeed('value').done(value => value).next(value /* 'value' */ => {}, fail => {}, err => {});
-Promise2.fail('value').fail(value => value).next(value => {}, fail /* 'value' */ => {}, err => {});
+Promise2.succeed('value')
+  .done(value => value)
+  .next(value /* 'value' */ => {}, fail => {}, err => {});
+Promise2.fail('value')
+  .fail(value => value)
+  .next(value => {}, fail /* 'value' */ => {}, err => {});
 ```
 
 As stated earlier you can change state of resulting Promise2 object by returning Promise2 instance from handler:
 
 ```typescript
-Promise2.fail('value').fail(value => Promise2.succeed(value)).next(value /* 'value' */ => {}, fail => {}, err => {});
-Promise2.fail('value').fail(value => Promise2.throw(value)).next(value => {}, fail => {}, err /* 'value' */ => {});
+Promise2.fail('value')
+  .fail(value => Promise2.succeed(value))
+  .next(value /* 'value' */ => {}, fail => {}, err => {});
+Promise2.fail('value')
+  .fail(value => Promise2.throw(value))
+  .next(value => {}, fail => {}, err /* 'value' */ => {});
 ```
