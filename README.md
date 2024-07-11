@@ -1,7 +1,7 @@
 # Promise 2
 
 An alternative Promise library that separate Error and Exception concerns.
-Errors are `expected failures` while Exceptions are `unexcpected`
+Errors are `expected failures` while Exceptions are `unexpected`
 
 ## Usage
 
