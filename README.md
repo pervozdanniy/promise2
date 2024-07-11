@@ -1,13 +1,13 @@
 # Promise 2
 
 An alternative Promise library that separate Error and Exception concerns.
-Errors are `expected failures` while Exceptions `unexcpected`
+Errors are `expected failures` while Exceptions are `unexcpected`
 
 ## Usage
 
 ### Instantiating
 
-Promise2 allows you to create PromiseLike object in a very close manner to original Promise
+Promise2 constructor creates PromiseLike object in a very close manner to original Promise
 
 ```typescript
 import Promise2 from '@pervozdanniy/promise2';
@@ -17,14 +17,14 @@ new Promise2((success, fail, error) => {
 });
 
 Promise2.succeed('value'); // Promise2<string, never>
-Promise2.fail('value'); // Promise2<never, string>
-Promise2.throw('value'); // Promise2<never, never>
+Promise2.fail('failure'); // Promise2<never, string>
+Promise2.throw('exception'); // Promise2<never, never>
 ```
 
 ### Compatibility
 
 Promise2 implements `PromiseLike` interface so it could be `await`ed or `then`ed in same manner as native Promise.
-But with one important difference: Promise2 object resolve to a tuple `[Err | null, Value?]`
+But with one important difference: Promise2 object resolves to a tuple `[Error | null, Value?]`
 
 ```typescript
 const pr = Promise2.succeed('Ok value');
@@ -39,12 +39,12 @@ pr2.then(value /* ['Reason value', undefined] */ => {});
   await pr2; // ['Reason value', undefined]
 })();
 
-const pr3 = Promise2.throw('Exception value');
-pr3.then(value => {}, err /* 'Exception value' */ => {});
+const pr3 = Promise2.throw('Exception');
+pr3.then(value => {}, err /* 'Exception' */ => {});
 (async () => {
   try {
     await pr3;
-  } catch (err /* 'Exception value' */) {}
+  } catch (err /* 'Exception' */) {}
 })();
 
 ```
