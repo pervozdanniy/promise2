@@ -6,7 +6,7 @@ type Handlers<TS = unknown, TF = unknown> = {
 
 type Unwind<T> = T extends Promise2<infer S, infer F> ? Promise2<S, F> : T;
 
-type Handler<T, R> = (val: T) => R extends Promise2<infer S, infer F> ? Promise2<S, F> : R;
+type Handler<T, R> = (val: T) => Unwind<R>;
 
 type ParamTuple<Ok, Fail> = [null, Ok] | [Fail];
 
@@ -26,7 +26,7 @@ function isPromiseLike<T>(maybePromise: PromiseLike<T> | unknown): maybePromise 
 }
 
 export default class Promise2<Ok, Fail> implements PromiseLike<ParamTuple<Ok, Fail>> {
-  static succeed(value: unknown) {
+  static succeed(value?: unknown) {
     if (isPromise2(value)) {
       return value;
     }
@@ -34,7 +34,7 @@ export default class Promise2<Ok, Fail> implements PromiseLike<ParamTuple<Ok, Fa
     return new Promise2((success) => success(value));
   }
 
-  static fail(value: unknown) {
+  static fail(value?: unknown) {
     if (isPromise2(value)) {
       return value;
     }
@@ -42,7 +42,7 @@ export default class Promise2<Ok, Fail> implements PromiseLike<ParamTuple<Ok, Fa
     return new Promise2((_, fail) => fail(value));
   }
 
-  static throw(err: unknown) {
+  static throw(err?: unknown) {
     return new Promise2((_s, _f, error) => error(err));
   }
 
@@ -76,7 +76,7 @@ export default class Promise2<Ok, Fail> implements PromiseLike<ParamTuple<Ok, Fa
 
   #defaultErrorHandler(err: unknown) {
     // emit 'unhandledRejection'
-    Promise.reject(err);
+    return Promise.reject(err);
   }
 
   constructor(
@@ -169,6 +169,11 @@ export default class Promise2<Ok, Fail> implements PromiseLike<ParamTuple<Ok, Fa
     });
   }
 
+  success<TRes1, TRes2>(onSuccess: (val: Ok) => TRes1, onErr?: (err: unknown) => TRes2): Promise2<TRes1, TRes2>;
+  success<TRes1, TRes2>(
+    onSuccess: (val: Ok) => Promise2<TRes1, TRes2>,
+    onErr?: (err: unknown) => Promise2<TRes1, TRes2>
+  ): Promise2<TRes1, TRes2>;
   public success<TRes1, TRes2>(onSuccess: Handler<Ok, TRes1>, onErr?: Handler<unknown, TRes2>) {
     return this.next(onSuccess, undefined, onErr);
   }
@@ -225,33 +230,10 @@ export default class Promise2<Ok, Fail> implements PromiseLike<ParamTuple<Ok, Fa
   }
 
   public finally(callback: () => void) {
-    return new Promise2<Ok, Fail>((success, fail, error) => {
-      let val: Ok | Fail;
-      let isFailed: boolean;
-      let thrown: unknown;
-
-      this.catch((err) => (thrown = err))
-        .then(
-          (value) => {
-            isFailed = false;
-            val = value as Ok;
-            return callback();
-          },
-          (err) => {
-            isFailed = true;
-            val = err as Fail;
-            return callback();
-          }
-        )
-        .then(() => {
-          if (thrown) {
-            return error(thrown);
-          }
-          if (isFailed) {
-            return fail(val as Fail);
-          }
-          return success(val as Ok);
-        });
-    });
+    return this.next(
+      (value) => Promise2.succeed(callback()).success(() => value),
+      (value) => Promise2.succeed(callback()).success(() => Promise2.fail(value)),
+      (err) => Promise2.succeed(callback()).success(() => Promise2.throw(err))
+    );
   }
 }

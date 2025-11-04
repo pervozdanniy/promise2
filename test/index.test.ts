@@ -77,7 +77,7 @@ describe('Promise2 test', () => {
       expect(fn).toHaveBeenCalledTimes(1);
     });
 
-    it('should call handlers attached after values is resolved', async () => {
+    it('should call handlers attached after value is resolved', async () => {
       expect.assertions(3);
       const executorFn = jest.fn((success) => success());
       const handlerFn = jest.fn();
@@ -88,7 +88,7 @@ describe('Promise2 test', () => {
       expect(handlerFn).toHaveBeenCalledTimes(1);
     });
 
-    it('should call handlers attached before values is resolved', async () => {
+    it('should call handlers attached before value is resolved', async () => {
       expect.assertions(4);
       const resolverFn = jest.fn((success) => success());
       const handlerFn = jest.fn();
