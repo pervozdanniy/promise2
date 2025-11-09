@@ -7,6 +7,7 @@ describe('Promise2.catch()', () => {
     jest.clearAllMocks();
   });
 
+
   describe('Basic error handling', () => {
     it('should call catch handler when promise throws', async () => {
       const catchHandler = jest.fn();
@@ -156,7 +157,7 @@ describe('Promise2.catch()', () => {
 
   describe('State transitions', () => {
     it('should handle catch after success state change', async () => {
-      const catchHandler = jest.fn();
+      const catchHandler = jest.fn(() => 'catched');
       const finalHandler = jest.fn();
 
       const pr = Promise2.succeed('start')
@@ -167,11 +168,11 @@ describe('Promise2.catch()', () => {
       await pr;
 
       expect(catchHandler).toHaveBeenCalledWith('changed');
-      expect(finalHandler).toHaveBeenCalledWith('changed');
+      expect(finalHandler).toHaveBeenCalledWith('catched');
     });
 
     it('should handle catch after fail state change', async () => {
-      const catchHandler = jest.fn();
+      const catchHandler = jest.fn(() => 'catched');
       const failHandler = jest.fn(() => Promise2.throw('fail to error'));
       const finalHandler = jest.fn();
 
@@ -183,17 +184,18 @@ describe('Promise2.catch()', () => {
       await pr;
 
       expect(catchHandler).toHaveBeenCalledWith('fail to error');
-      expect(finalHandler).toHaveBeenCalledWith('fail to error');
+      expect(finalHandler).toHaveBeenCalledWith('catched');
     });
   });
 
   describe('Error propagation', () => {
-    it('should immediately throw error when no catch handler is provided', async () => {
-      expect.assertions(1);
+    it('should immediately throw error if no catch handler is provided', async () => {
+      expect.assertions(2);
+      expect(Promise2.throw('unhandled error')).rejects.toBe('unhandled error');
+      
       try {
-        await Promise2.throw('unhandled error');
+          await Promise2.throw('unhandled error');
       } catch (error) {
-        console.log('ERROR', error);
         expect(error).toBe('unhandled error');
       }
     });

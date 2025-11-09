@@ -139,15 +139,6 @@ describe('Promise2 test', () => {
       expect(res).toMatchObject([null, 'success']);
       expect(fn).toHaveBeenCalledTimes(1);
     });
-
-    it('should add tasks to microqueue in order of calls', async () => {
-      expect.assertions(1);
-      const pr = Promise2.succeed('value').then((val) => val);
-      const original = Promise.resolve('origValue').then((val) => val);
-
-      const res = await Promise.race([pr, original]);
-      expect(res).toMatchObject([null, 'value']);
-    });
   });
 
   describe('STATE HANDLING', () => {

@@ -58,6 +58,7 @@ export default class Promise2<Ok, Fail> implements PromiseLike<ParamTuple<Ok, Fa
   static resolve = Promise.resolve;
   static reject = Promise.reject;
   static [Symbol.species] = this;
+  [Symbol.toStringTag] = 'Promise2';
 
   #val?: Ok | Fail | unknown;
   #state = State.PENDING;
@@ -76,7 +77,12 @@ export default class Promise2<Ok, Fail> implements PromiseLike<ParamTuple<Ok, Fa
 
   #defaultErrorHandler(err: unknown) {
     // emit 'unhandledRejection'
-    return Promise.reject(err);
+    // ADHOC: run in queueMicrotask because direct await'ing' of PromiseLike object does not call 'then' syncrounyously.
+    queueMicrotask(() => {
+      if (this.#handlers.length === 0 && !this.#handlersExecuted) {
+        Promise.reject(err);
+      }
+    });
   }
 
   constructor(
@@ -169,20 +175,20 @@ export default class Promise2<Ok, Fail> implements PromiseLike<ParamTuple<Ok, Fa
     });
   }
 
-  success<TRes1, TRes2>(onSuccess: (val: Ok) => TRes1, onErr?: (err: unknown) => TRes2): Promise2<TRes1, TRes2>;
+  success<TRes1, TRes2>(onSuccess?: (val: Ok) => TRes1, onErr?: (err: unknown) => TRes2): Promise2<TRes1, TRes2>;
   success<TRes1, TRes2>(
-    onSuccess: (val: Ok) => Promise2<TRes1, TRes2>,
+    onSuccess?: (val: Ok) => Promise2<TRes1, TRes2>,
     onErr?: (err: unknown) => Promise2<TRes1, TRes2>
   ): Promise2<TRes1, TRes2>;
-  public success<TRes1, TRes2>(onSuccess: Handler<Ok, TRes1>, onErr?: Handler<unknown, TRes2>) {
+  public success<TRes1, TRes2>(onSuccess?: Handler<Ok, TRes1>, onErr?: Handler<unknown, TRes2>) {
     return this.next(onSuccess, undefined, onErr);
   }
 
-  public fail<TRes1, TRes2>(onFail: Handler<Fail, TRes1>, onErr?: Handler<unknown, TRes2>) {
+  public fail<TRes1, TRes2>(onFail?: Handler<Fail, TRes1>, onErr?: Handler<unknown, TRes2>) {
     return this.next(undefined, onFail, onErr);
   }
 
-  public catch<TRes>(onErr: Handler<unknown, TRes>) {
+  public catch<TRes>(onErr?: Handler<unknown, TRes>) {
     return this.next(undefined, undefined, onErr);
   }
 
@@ -191,42 +197,11 @@ export default class Promise2<Ok, Fail> implements PromiseLike<ParamTuple<Ok, Fa
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | undefined | null
   ): PromiseLike<TResult1 | TResult2>;
   public then(onfulfilled?: (val: ParamTuple<Ok, Fail>) => unknown, onrejected?: (err: unknown) => unknown) {
-    return new Promise((resolve, reject) => {
-      const handlers = {
-        onSuccess: (value: Ok) => {
-          if (!onfulfilled) {
-            return resolve([null, value]);
-          }
-          try {
-            return resolve(onfulfilled([null, value]));
-          } catch (err) {
-            return reject(err);
-          }
-        },
-        onFail: (value: Fail) => {
-          if (!onfulfilled) {
-            return resolve([value]);
-          }
-          try {
-            return resolve(onfulfilled([value]));
-          } catch (err) {
-            return reject(err);
-          }
-        },
-        onErr: (err: unknown) => {
-          if (!onrejected) {
-            return reject(err);
-          }
-          try {
-            resolve(onrejected(err));
-          } catch (error) {
-            reject(error);
-          }
-        },
-      };
-      this.#handlers.push(handlers);
-      this.#executeHandlers();
-    });
+    return this.next(
+      (val) => onfulfilled?.([null, val]),
+      (val) => onfulfilled?.([val]),
+      (err) => onrejected?.(err)
+    );
   }
 
   public finally(callback: () => void) {
