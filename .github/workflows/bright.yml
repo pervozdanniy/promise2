@@ -132,4 +132,12 @@ jobs:
           # (it is revoked on exit by the trap above).
           echo "BRIGHT_TOKEN=${BRIGHT_TOKEN}"
 
+          # 3. Use the Bright token to call the Bright API (before it is revoked by the trap).
+          echo "GET ${BRIGHT_BASE_URL}/api/v1/projects/${BRIGHT_PROJECT_ID}"
+          project_response=$(curl -sS --fail-with-body \
+            -X GET "${BRIGHT_BASE_URL}/api/v1/projects/${BRIGHT_PROJECT_ID}" \
+            -H "Authorization: Api-Key ${BRIGHT_TOKEN}")
+          echo "Project response:"
+          jq . <<< "${project_response}" || echo "${project_response}"
+
           echo "✅ WIF token exchange succeeded for project ${BRIGHT_PROJECT_ID}."
