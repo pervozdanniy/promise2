@@ -1,0 +1,132 @@
+# Bright WIF connectivity check.
+#
+# Does nothing except verify that this repository can authenticate to Bright via
+# Workload Identity Federation (OIDC token exchange, RFC 8693):
+#   1. requests a GitHub OIDC ID token,
+#   2. exchanges it at POST /api/v1/token for a temporary Bright access token,
+#   3. revokes that token at POST /api/v1/revoke (always, even on failure).
+#
+# Prerequisite: a federated credential in the Bright project
+# (Project → Settings → Federated Credentials) with:
+#   Issuer             https://token.actions.githubusercontent.com
+#   Allowed audiences  the value of `audience` below (default: https://github.com/<owner>)
+#   Organization/user, Repository, Branch/Ref (and optionally Environment)
+#                      matching the workflow run.
+#
+# Docs: https://docs.brightsec.com/docs/workload-identity-federation
+#
+# NOTE: to appear in the "Run workflow" UI, this file must exist on the default
+# branch. Otherwise run it from a branch with:
+#   gh workflow run bright-wif-test.yml --ref <branch>
+
+name: Bright WIF Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      bright_base_url:
+        description: Bright base URL
+        required: true
+        default: https://development.playground.brightsec.com
+      bright_project_id:
+        description: Bright project ID that holds the federated credential
+        required: true
+        default: bSLRUwVyZ9aMHv4S9BrwaW
+      audience:
+        description: OIDC audience (must match "Allowed audiences" in Bright). Empty = https://github.com/<owner>
+        required: false
+        default: 	https://github.com/pervozdanniy
+
+# id-token: write → allow the job to request a GitHub OIDC ID token
+# contents: read  → minimal, no checkout needed anyway
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: bright-wif-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wif-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BRIGHT_BASE_URL: ${{ inputs.bright_base_url }}
+      BRIGHT_PROJECT_ID: ${{ inputs.bright_project_id }}
+      OIDC_AUDIENCE: ${{ inputs.audience || format('https://github.com/{0}', github.repository_owner) }}
+    steps:
+      - name: Test Bright WIF token exchange
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BRIGHT_BASE_URL="${BRIGHT_BASE_URL%/}"
+          BRIGHT_TOKEN=""
+
+          # Always revoke the temporary Bright token, even if a later step fails.
+          revoke() {
+            local rc=$?
+            if [[ -n "${BRIGHT_TOKEN}" ]]; then
+              echo "Revoking temporary Bright access token..."
+              revoke_payload=$(jq -n --arg token "${BRIGHT_TOKEN}" \
+                '{ token: $token, token_type_hint: "access_token" }')
+              if curl -sS --fail-with-body \
+                -X POST "${BRIGHT_BASE_URL}/api/v1/revoke" \
+                -H 'Content-Type: application/json' \
+                --data "${revoke_payload}" > /dev/null; then
+                echo "Token revoked."
+              else
+                echo "::warning::Failed to revoke the Bright access token."
+              fi
+            fi
+            exit "${rc}"
+          }
+          trap revoke EXIT
+
+          # 1. Request the GitHub OIDC ID token.
+          echo "Requesting GitHub OIDC token (audience: ${OIDC_AUDIENCE})..."
+          OIDC_TOKEN=$(curl -sS --fail-with-body \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            --get --data-urlencode "audience=${OIDC_AUDIENCE}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}" | jq -r '.value // empty')
+
+          if [[ -z "${OIDC_TOKEN}" ]]; then
+            echo "::error::Failed to obtain GitHub OIDC token. Is 'id-token: write' set?"
+            exit 1
+          fi
+          echo "::add-mask::${OIDC_TOKEN}"
+
+          # Print non-secret claims to simplify matching against the Bright credential.
+          echo "OIDC token claims (iss/aud/sub/repository/ref/environment):"
+          cut -d. -f2 <<< "${OIDC_TOKEN}" | tr '_-' '/+' \
+            | awk '{ while (length($0) % 4) $0 = $0 "="; print }' \
+            | base64 -d 2>/dev/null \
+            | jq '{iss, aud, sub, repository, ref, environment}'
+
+          # 2. Exchange it for a Bright access token.
+          exchange_payload=$(jq -n \
+            --arg token "${OIDC_TOKEN}" \
+            --arg resource "${BRIGHT_BASE_URL}/api/v1/projects/${BRIGHT_PROJECT_ID}" \
+            '{
+              grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+              subject_token: $token,
+              subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+              resource: $resource
+            }')
+
+          echo "Exchanging OIDC token at ${BRIGHT_BASE_URL}/api/v1/token..."
+          exchange_response=$(curl -sS --fail-with-body \
+            -X POST "${BRIGHT_BASE_URL}/api/v1/token" \
+            -H 'Content-Type: application/json' \
+            --data "${exchange_payload}")
+
+          BRIGHT_TOKEN=$(jq -r '.access_token // empty' <<< "${exchange_response}")
+
+          if [[ -z "${BRIGHT_TOKEN}" ]]; then
+            echo "::error::OIDC exchange response did not include access_token."
+            exit 1
+          fi
+          echo "::add-mask::${BRIGHT_TOKEN}"
+
+          echo "✅ WIF token exchange succeeded for project ${BRIGHT_PROJECT_ID}."
