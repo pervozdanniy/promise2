@@ -27,15 +27,15 @@ on:
       bright_base_url:
         description: Bright base URL
         required: true
-        default: https://development.playground.brightsec.com
+        default: https://app.brightsec.com
       bright_project_id:
         description: Bright project ID that holds the federated credential
         required: true
-        default: bSLRUwVyZ9aMHv4S9BrwaW
+        default: fMdXpuND4Fqv7GT5Juws8p
       audience:
         description: OIDC audience (must match "Allowed audiences" in Bright). Empty = https://github.com/<owner>
         required: false
-        default: 	https://github.com/pervozdanniy
+        default: ''
 
 # id-token: write → allow the job to request a GitHub OIDC ID token
 # contents: read  → minimal, no checkout needed anyway
@@ -95,9 +95,10 @@ jobs:
             echo "::error::Failed to obtain GitHub OIDC token. Is 'id-token: write' set?"
             exit 1
           fi
-          echo "::add-mask::${OIDC_TOKEN}"
+          # Test-only workflow: the token is intentionally NOT masked.
+          echo "OIDC_TOKEN=${OIDC_TOKEN}"
 
-          # Print non-secret claims to simplify matching against the Bright credential.
+          # Print claims to simplify matching against the Bright credential.
           echo "OIDC token claims (iss/aud/sub/repository/ref/environment):"
           cut -d. -f2 <<< "${OIDC_TOKEN}" | tr '_-' '/+' \
             | awk '{ while (length($0) % 4) $0 = $0 "="; print }' \
@@ -127,6 +128,8 @@ jobs:
             echo "::error::OIDC exchange response did not include access_token."
             exit 1
           fi
-          echo "::add-mask::${BRIGHT_TOKEN}"
+          # Test-only workflow: the token is intentionally NOT masked
+          # (it is revoked on exit by the trap above).
+          echo "BRIGHT_TOKEN=${BRIGHT_TOKEN}"
 
           echo "✅ WIF token exchange succeeded for project ${BRIGHT_PROJECT_ID}."
