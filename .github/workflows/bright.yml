@@ -27,15 +27,15 @@ on:
       bright_base_url:
         description: Bright base URL
         required: true
-        default: https://app.brightsec.com
+        default: https://development.playground.brightsec.com
       bright_project_id:
         description: Bright project ID that holds the federated credential
         required: true
-        default: fMdXpuND4Fqv7GT5Juws8p
+        default: bSLRUwVyZ9aMHv4S9BrwaW
       audience:
         description: OIDC audience (must match "Allowed audiences" in Bright). Empty = https://github.com/<owner>
         required: false
-        default: ''
+        default: https://github.com/pervozdanniy
 
 # id-token: write → allow the job to request a GitHub OIDC ID token
 # contents: read  → minimal, no checkout needed anyway
